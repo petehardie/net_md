@@ -16,7 +16,7 @@ import threading
 
 logging.basicConfig(level=logging.DEBUG, format='[%(levelname)s] (%threadName)-10s) %(message)s',)
 
-timeout = { true : 60, false : 5 } # timeout for when up, and when down
+timeout = { True : 60, False : 5 } # timeout for when up, and when down
 #reportTimeout = 24 * 60 * 60
 reportTimeout = 60
 
@@ -46,6 +46,9 @@ class Node:
 		self.downAt = 0
 		self.outages = queue # holder for the global
 
+	def getIp(self):
+		return self.address
+
 	def ping(self):
 		try:
 			ping_response = subprocess.check_call(["/bin/ping", "-c1", "-w1", self.address], stdout=subprocess.PIPE)
@@ -59,7 +62,7 @@ class Node:
 				self.downAt = time.time()
 		return self.connected
 
-def load_data(filename):
+def load_nodes(filename):
 	array = []
 	with open(filename) as f:
 		for line in f:
@@ -77,25 +80,53 @@ def monitor(node):
 def report(queue, nodes):
 	while True:
 		time.sleep(24 * 60 * 60) # sleep 24 hours
+		write_report(queue, nodes)
+
+def write_report(queue, nodes):
+		# generate filename from date
 		d = datetime.date.today()
 		filename = str(d.year) + str(d.month) + str(d.day)
 		path = reportDir + '/' + filename
 		f = open(path, 'w')
+		# report on the node status
 		for n in nodes:
-			f.write('Node ' + n.getIp() + ' is '
+			f.write('Node ' + n.getIp() + ' is ')
 			if n.connected:
 				f.write('up\n')
 			else:
 				f.write('down\n')
 			f.write('==================================\n')
-		while queue.empty == False:
+		# report the outages
+		print 'queue size = ', queue.qsize()
+		while queue.empty() == False:
+			print '>>'
 			outage = queue.get()
-			f.write(str(outage.getIp()) + ' was out at ' + time.strftime('%X', outage.getDown()) + ' until ' + time.strftime('%X', outage.getUp() + '\n')
+			f.write(str(outage.getIp()) + ' was out at ' + time.strftime('%X', time.localtime(outage.getDown())) + ' until ' + time.strftime('%X', time.localtime(outage.getUp())) + '\n')
 		f.close()
 
+# test function to load queue for report
+def load_queue(queue, nodes):
+	lastHr = 0
+	lastMin = 0
+	i = 0
+	j = 0
+	for n in nodes:
+		# need to adjust for test day/date
+		for k in xrange(1,5):
+			t1 = time.mktime([2015, 12, 21, lastHr + i, lastMin + j, 0, 0, 355, 1])
+			i += 1
+			j += 3
+			t2 = time.mktime([2015, 12, 21, lastHr + i, lastMin + j, 0, 0, 355, 1])
+			i += 2
+			j += 5
+			queue.put(Outage(n.getIp(), t1, t2))
+			print 'outage queue size = ', queue.qsize()
 
 if __name__ == '__main__':
-	nodes = load_data('nodes.txt')
+	nodes = load_nodes('nodes.txt')
+	load_queue(outages, nodes)
+	print 'outage queue size = ', outages.qsize()
+	write_report(outages, nodes)
 	# one thread per node to ping and generate outage items
 	# one thread to collect outages every 24 hours and generate a report to be emailed
 	# one thread to run every 24 hours (or while there are reports to be mailed) to mail reports
