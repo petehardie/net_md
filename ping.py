@@ -17,10 +17,10 @@ import threading
 #logging.basicConfig(level=logging.DEBUG, format='[%(levelname)s] (%threadName)-10s) %(message)s',)
 logging.basicConfig(level=logging.DEBUG, format='[%(levelname)s] %(asctime)s %(message)s',)
 
-#timeout = { True : 60, False : 5 } # timeout for when up, and when down
-timeout = { True : 15, False : 5 } # timeout for when up, and when down
-#reportTimeout = 24 * 60 * 60
-reportTimeout = 5 * 60
+timeout = { True : 60, False : 5 } # timeout for when up, and when down
+#timeout = { True : 15, False : 5 } # timeout for when up, and when down
+reportTimeout = 24 * 60 * 60
+#reportTimeout = 5 * 60
 
 outages = Queue.Queue() # the queue of outage reports
 
@@ -49,6 +49,7 @@ class Node:
 		self.connected = True
 		self.downAt = 0
 		self.outages = queue # holder for the global
+		self.failCount = 0
 		logging.debug("Created node for IP:" + str(self.address))
 
 	def getAddress(self):
@@ -59,15 +60,22 @@ class Node:
 		try:
 			logging.debug("pinging " + str(self.address))
 			# -W2 for ping?
-			ping_response = subprocess.check_call(["/bin/ping", "-c1", "-w2", self.address], stdout=subprocess.PIPE)
+			#ping_response = subprocess.check_call(["/bin/ping", "-c1", "-w2", self.address], stdout=subprocess.PIPE)
+			ping_response = subprocess.check_call(["/bin/ping", "-c1", "-W2", self.address], stdout=subprocess.PIPE)
 			if self.connected == False:
+				logging.debug("node " + str(self.address) + " back online")
 				self.connected = True
 				# record the outage
 				self.outages.put(Outage(self.address, self.downAt, time.time()))
+			self.failCount = 0
 		except:
 			if self.connected == True:
-				self.connected = False
-				self.downAt = time.time()
+				self.failCount += 1
+				logging.debug("ip " + str(self.address) + " failed count " + str(self.failCount));
+				if self.failCount > 2:
+					self.connected = False
+					logging.debug("ip " + self.address + " considered down ");
+					self.downAt = time.time()
 		return self.connected
 
 def load_nodes(filename):
@@ -85,6 +93,7 @@ def monitor(node):
 
 # called to read the outages from the queue and generate a report file
 # includes the current state of each node
+reportCount = 0
 def report(queue, nodes):
 	while True:
 		time.sleep(reportTimeout) # sleep 24 hours
@@ -94,7 +103,10 @@ def write_report(queue, nodes):
 		# generate filename from date
 		logging.debug("creating a report")
 		d = datetime.date.today()
-		filename = str(d.year) + str(d.month) + str(d.day)
+		global reportCount
+		#filename = str(d.year) + str(d.month) + str(d.day)
+		filename = str(d.year) + str(d.month) + str(d.day) + '_' + str(reportCount)
+		reportCount += 1
 		path = reportDir + '/' + filename
 		f = open(path, 'w')
 		# report on the node status
