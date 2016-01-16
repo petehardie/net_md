@@ -7,25 +7,14 @@
 # 	report status at the 24 hr mark for each node
 #
 
+import sys
 import subprocess
 import datetime
 import time
 import Queue
 import logging
 import threading
-
-#logging.basicConfig(level=logging.DEBUG, format='[%(levelname)s] (%threadName)-10s) %(message)s',)
-logging.basicConfig(level=logging.DEBUG, format='[%(levelname)s] %(asctime)s %(message)s',)
-
-timeout = { True : 60, False : 5 } # timeout for when up, and when down
-#timeout = { True : 15, False : 5 } # timeout for when up, and when down
-reportTimeout = 24 * 60 * 60
-#reportTimeout = 5 * 60
-
-outages = Queue.Queue() # the queue of outage reports
-
-reportDir = "./reports"
-
+import ConfigParser
 
 class Outage:
 	def __init__(self, ip, down, up):
@@ -143,8 +132,63 @@ def load_queue(queue, nodes):
 			queue.put(Outage(n.getIp(), t1, t2))
 			#print 'outage queue size = ', queue.qsize()
 
+def readConfig():
+	config = ConfigParser.ConfigParser()
+	config.read("ping.config")
+	for s in config.sections():
+		for o in config.options(s):
+			value = config.get(s, o)
+			print o, value
+			if o == 'True':
+				testMode = True
+				timeout = test_timeout
+				reportTimeout = test_reportTimeout
+			else:
+				testMode = False
+				timeout = real_timeout
+				reportTimeout = real_reportTimeout
+			if o == 'nodefile':
+				nodefile = value
+			if o == 'reportdir':
+				reportDir = value
+	print 'testMode = ', testMode
+	print 'timeout = ', timeout
+	print 'nodefile = ', nodefile
+	print 'reportDir = ', reportDir
+	print 'reportTimeout = ', reportTimeout
+	#sys.exit()
+
+logging.basicConfig(level=logging.DEBUG, format='[%(levelname)s] %(asctime)s %(message)s',)
+
+# test mode flag
+testMode = True
+
+# ping timeout for connected and when failing, real and test run values
+real_timeout = { True : 60, False : 5 } # timeout for when up, and when down
+test_timeout = { True : 15, False : 5 } # timeout for when up, and when down
+timeout = test_timeout;
+
+# report interval, real and test run values
+real_reportTimeout = 24 * 60 * 60
+test_reportTimeout = 5 * 60
+reportTimeout = test_reportTimeout
+
+outages = Queue.Queue() # the queue of outage reports
+
+# where the reports file be written
+# default, could be set in config read, but ok here
+test_reportDir = "./reports"
+reportDir = test_reportDir
+
+# file with nodes to ping
+# default, could be set in config read, but ok here
+nodefile = 'nodes.txt'
+
 if __name__ == '__main__':
-	nodes = load_nodes('nodes.txt')
+	# read config file
+	readConfig()
+	# need to read this file from config
+	nodes = load_nodes(nodefile)
 
 	# test the report
 	#load_queue(outages, nodes)
@@ -158,9 +202,7 @@ if __name__ == '__main__':
 	# one thread to collect outages every 24 hours and generate a report to be emailed - call report()
 	node_threads = []
 	for n in nodes:
-		#t = threading.Thread(name=str(n.getAddress()), target=monitor, args=(n,))
 		t = threading.Thread(target=monitor, args=(n,))
-		#t = threading.Thread(name='xxx', target=monitor, args=(n,))
 		node_threads.append(t)
 		t.start()
 	report_thread = threading.Thread(name="REPORT", target=report, args=(outages, nodes,))
