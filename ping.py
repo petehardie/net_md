@@ -16,6 +16,30 @@ import logging
 import threading
 import ConfigParser
 
+# test mode flag
+testMode = True
+
+# ping timeout for connected and when failing, real and test run values
+real_timeout = { True : 60, False : 5 } # timeout for when up, and when down
+test_timeout = { True : 15, False : 5 } # timeout for when up, and when down
+timeout = test_timeout;
+
+# report interval, real and test run values
+real_reportTimeout = 24 * 60 * 60
+test_reportTimeout = 5 * 60
+reportTimeout = test_reportTimeout
+
+outages = Queue.Queue() # the queue of outage reports
+
+# where the reports file be written
+# default, could be set in config read, but ok here
+test_reportDir = "./reports"
+reportDir = test_reportDir
+
+# file with nodes to ping
+# default, could be set in config read, but ok here
+nodefile = 'nodes.txt'
+
 class Outage:
 	def __init__(self, ip, down, up):
 		self.ip = ip # IP address
@@ -158,31 +182,8 @@ def readConfig():
 	print 'reportTimeout = ', reportTimeout
 	#sys.exit()
 
-logging.basicConfig(level=logging.DEBUG, format='[%(levelname)s] %(asctime)s %(message)s',)
-
-# test mode flag
-testMode = True
-
-# ping timeout for connected and when failing, real and test run values
-real_timeout = { True : 60, False : 5 } # timeout for when up, and when down
-test_timeout = { True : 15, False : 5 } # timeout for when up, and when down
-timeout = test_timeout;
-
-# report interval, real and test run values
-real_reportTimeout = 24 * 60 * 60
-test_reportTimeout = 5 * 60
-reportTimeout = test_reportTimeout
-
-outages = Queue.Queue() # the queue of outage reports
-
-# where the reports file be written
-# default, could be set in config read, but ok here
-test_reportDir = "./reports"
-reportDir = test_reportDir
-
-# file with nodes to ping
-# default, could be set in config read, but ok here
-nodefile = 'nodes.txt'
+#logging.basicConfig(level=logging.DEBUG, format='[%(levelname)s] %(asctime)s %(message)s',)
+logging.basicConfig(level=logging.ERROR, format='[%(levelname)s] %(asctime)s %(message)s',)
 
 if __name__ == '__main__':
 	# read config file
