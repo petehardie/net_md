@@ -16,6 +16,7 @@ import logging
 import threading
 import ConfigParser
 
+# TODO use a dict for config values used
 # test mode flag
 testMode = True
 
@@ -106,11 +107,13 @@ def monitor(node):
 
 # called to read the outages from the queue and generate a report file
 # includes the current state of each node
+# TODO modify to spawn a thread to write the report, so that write/dir errors do not stop system
 reportCount = 0
 def report(queue, nodes):
 	while True:
 		time.sleep(reportTimeout) # sleep 24 hours
-		write_report(queue, nodes)
+		threading.Thread(target=write_report, args=(queue, nodes,)).start()
+		#write_report(queue, nodes)
 
 def write_report(queue, nodes):
 		# generate filename from date
@@ -156,25 +159,35 @@ def load_queue(queue, nodes):
 			queue.put(Outage(n.getIp(), t1, t2))
 			#print 'outage queue size = ', queue.qsize()
 
+# TODO pass in dict for config values in use
 def readConfig():
 	config = ConfigParser.ConfigParser()
 	config.read("ping.config")
+	global testMode
+	global timeout
+	global reportTimeout
+	global ndoefile
+	global reportDir
 	for s in config.sections():
 		for o in config.options(s):
 			value = config.get(s, o)
 			print o, value
-			if o == 'True':
-				testMode = True
-				timeout = test_timeout
-				reportTimeout = test_reportTimeout
-			else:
-				testMode = False
-				timeout = real_timeout
-				reportTimeout = real_reportTimeout
+			if o == 'test':
+				if value == 'True':
+					testMode = True
+				else:
+					testMode = False
 			if o == 'nodefile':
 				nodefile = value
 			if o == 'reportdir':
 				reportDir = value
+	if testMode:
+		timeout = test_timeout
+		reportTimeout = test_reportTimeout
+	else:
+		timeout = real_timeout
+		reportTimeout = real_reportTimeout
+	# TODO change to logging, probably ERROR so they are always visible
 	print 'testMode = ', testMode
 	print 'timeout = ', timeout
 	print 'nodefile = ', nodefile
@@ -182,8 +195,8 @@ def readConfig():
 	print 'reportTimeout = ', reportTimeout
 	#sys.exit()
 
-#logging.basicConfig(level=logging.DEBUG, format='[%(levelname)s] %(asctime)s %(message)s',)
-logging.basicConfig(level=logging.ERROR, format='[%(levelname)s] %(asctime)s %(message)s',)
+logging.basicConfig(level=logging.DEBUG, format='[%(levelname)s] %(asctime)s %(message)s',)
+#logging.basicConfig(level=logging.ERROR, format='[%(levelname)s] %(asctime)s %(message)s',)
 
 if __name__ == '__main__':
 	# read config file
@@ -201,6 +214,12 @@ if __name__ == '__main__':
 
 	# one thread per node to ping and generate outage items - call monitor()
 	# one thread to collect outages every 24 hours and generate a report to be emailed - call report()
+
+	# TODO need to change to have something monitor ping threads and respawn if needed
+	# use isAlive() on the threads
+	# ? how to monitor ?
+	# 
+	# TODO use daemon threads to make exit cleaner?
 	node_threads = []
 	for n in nodes:
 		t = threading.Thread(target=monitor, args=(n,))
